@@ -1,0 +1,6 @@
+#!/bin/bash 
+
+for generator in /app/letsencrypt/generated/letsencrypt/generate-*; do
+    chmod +x "$generator"
+    "$generator"
+done

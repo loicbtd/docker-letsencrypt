@@ -1,0 +1,49 @@
+#!/bin/bash
+
+PATH_FILE_REVERSE_PROXY="/config/tls/tls.json"
+
+echo "NOTICE: creating directories"
+mkdir -p \
+    /etc/letsencrypt \
+
+    /etc/nginx/proxy-confs \
+    /app/reverse-proxy/generated/dhparam \
+    /app/reverse-proxy/generated/letsencrypt \
+    /config/custom-certificates \
+    /config/nginx
+
+if [ -f $PATH_FILE_REVERSE_PROXY ]; then rm $PATH_FILE_REVERSE_PROXY; fi
+if [ "$CONFIG_MODE" = "shell" ]; then
+    echo "NOTICE: getting reverse-proxy.json from env"
+    touch $PATH_FILE_REVERSE_PROXY
+    echo "$SHELL_JSON" > $PATH_FILE_REVERSE_PROXY
+fi
+if [[ "$CONFIG_MODE" == "git"* ]]; then
+    mkdir -p /tmp/git/old
+    cd /tmp/git/old
+    git init
+    if [ "$CONFIG_MODE" = "gitlab" ]; then
+        echo "NOTICE: getting reverse-proxy.json from gitlab"
+        git pull https://oauth2:$GIT_TOKEN@$GIT_HOST/$GIT_USERNAME/$GIT_REPOSITORY.git
+    fi
+    if [ "$CONFIG_MODE" = "github" ]; then
+        echo "NOTICE: getting reverse-proxy.json from github"
+        git pull https://x-access-token:$GIT_TOKEN@github.com/$GIT_USERNAME/$GIT_REPOSITORY.git
+    fi
+    cp ./reverse-proxy.json $PATH_FILE_REVERSE_PROXY
+    cd -
+    rm -rf /tmp/git
+fi
+
+echo "NOTICE: starting reverse_proxy_manager.py"
+python3 /app/reverse-proxy/reverse_proxy_manager.py
+
+echo "NOTICE: applying DH param configuration"
+chmod +x /app/reverse-proxy/generated/dhparam/generate-dhparam
+/app/reverse-proxy/generated/dhparam/generate-dhparam
+
+echo "NOTICE: applying nginx configuration"
+for generator in /app/reverse-proxy/generated/letsencrypt/generate-*; do
+    chmod +x "$generator"
+    "$generator"
+done
